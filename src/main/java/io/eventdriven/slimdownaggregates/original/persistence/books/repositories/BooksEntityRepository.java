@@ -1,6 +1,7 @@
 package io.eventdriven.slimdownaggregates.original.persistence.books.repositories;
 
 import io.eventdriven.slimdownaggregates.original.domain.books.Book;
+import io.eventdriven.slimdownaggregates.original.domain.books.BookEvent;
 import io.eventdriven.slimdownaggregates.original.domain.books.entities.BookId;
 import io.eventdriven.slimdownaggregates.original.domain.books.factories.BookFactory;
 import io.eventdriven.slimdownaggregates.original.domain.books.repositories.BooksRepository;
@@ -50,12 +51,23 @@ public class BooksEntityRepository extends JpaEntityRepository<Book, UUID, BookE
 
   @Override
   protected BookEntity mapToEntity(Book aggregate) {
-    return BookEntityMapper.mapToEntity(aggregate, new BookEntity(), entityManager);
+    var events = aggregate.getDomainEvents();
+    var entity = new BookEntity();
+
+    for(var event :events){
+      BookEntityMapper.mapToEntity((BookEvent) event, entity, entityManager);
+    }
+
+    return entity;
   }
 
   @Override
   protected void updateEntity(BookEntity entity, Book aggregate) {
-      BookEntityMapper.mapToEntity(aggregate, entity, entityManager);
+    var events = aggregate.getDomainEvents();
+
+    for(var event :events){
+      BookEntityMapper.mapToEntity((BookEvent) event, entity, entityManager);
+    }
   }
 
   @Override

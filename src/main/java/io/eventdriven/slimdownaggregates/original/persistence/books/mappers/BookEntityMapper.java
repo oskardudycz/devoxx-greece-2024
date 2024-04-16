@@ -1,9 +1,11 @@
 package io.eventdriven.slimdownaggregates.original.persistence.books.mappers;
 
 import io.eventdriven.slimdownaggregates.original.domain.books.Book;
+import io.eventdriven.slimdownaggregates.original.domain.books.BookEvent;
 import io.eventdriven.slimdownaggregates.original.domain.books.entities.*;
 import io.eventdriven.slimdownaggregates.original.domain.books.factories.BookFactory;
 import io.eventdriven.slimdownaggregates.original.infrastructure.valueobjects.NonEmptyString;
+import io.eventdriven.slimdownaggregates.original.infrastructure.valueobjects.NonNegativeInt;
 import io.eventdriven.slimdownaggregates.original.infrastructure.valueobjects.PositiveInt;
 import io.eventdriven.slimdownaggregates.original.persistence.authors.AuthorEntity;
 import io.eventdriven.slimdownaggregates.original.persistence.books.BookEntity;
@@ -15,7 +17,7 @@ import io.eventdriven.slimdownaggregates.original.persistence.publishers.Publish
 import io.eventdriven.slimdownaggregates.original.persistence.reviewers.ReviewerEntity;
 import jakarta.persistence.EntityManager;
 
-import java.util.stream.Collectors;
+import static io.eventdriven.slimdownaggregates.original.domain.books.BookEvent.*;
 
 public class BookEntityMapper {
 
@@ -52,7 +54,7 @@ public class BookEntityMapper {
       .map(c -> new Chapter(
         new ChapterNumber(c.getNumber()),
         new ChapterTitle(c.getTitle()),
-        new ChapterContent(c.getContent())))
+        new ChapterContent(c.getContent(), new NonNegativeInt(0), new NonNegativeInt(0))))
       .toList();
     var translations = bookEntity.getTranslations().stream()
       .map(c -> new Translation(
@@ -91,56 +93,105 @@ public class BookEntityMapper {
     );
   }
 
-  public static BookEntity mapToEntity(Book book, BookEntity entity, EntityManager em) {
-    entity.setId(book.id().value());
-    entity.setCurrentState(BookEntity.State.valueOf(book.currentState().name()));
-    entity.setTitle(book.title().value());
-    entity.setGenre(book.genre() != null ? book.genre().value() : null);
+  public static BookEntity mapToEntity(BookEvent bookEvent, BookEntity entity, EntityManager em) {
+    switch (bookEvent) {
+      case WritingStarted writingStarted -> {
+        entity.setId(writingStarted.bookId().value());
+        entity.setCurrentState(BookEntity.State.Writing);
 
-    var authorEntity = em.find(AuthorEntity.class, book.author().id().value());
-    entity.setAuthor(authorEntity);
+        entity.setEdition(writingStarted.edition().value());
+        entity.setTitle(writingStarted.title().value());
+        entity.setGenre(writingStarted.genre() != null ? writingStarted.genre().value() : null);
 
-    var publisherEntity = em.find(PublisherEntity.class, book.publisher().id().value());
-    entity.setPublisher(publisherEntity);
-    entity.setEdition(book.getEdition().value());
-    entity.setIsbn(book.isbn() != null ? book.isbn().value() : null);
-    entity.setPublicationDate(book.publicationDate());
-    entity.setTotalPages(book.getTotalPages() != null ? book.getTotalPages().value() : null);
-    entity.setNumberOfIllustrations(book.getNumberOfIllustrations() != null ? book.getNumberOfIllustrations().value() : null);
-    entity.setBindingType(book.getBindingType() != null ? book.getBindingType().value() : null);
-    entity.setSummary(book.getSummary() != null ? book.getSummary().value() : null);
+        var authorEntity = em.find(AuthorEntity.class, writingStarted.author().id().value());
+        entity.setAuthor(authorEntity);
 
-    entity.getReviewers().clear();
-    var reviewers = book.reviewers().stream()
-      .map(r -> new ReviewerEntity(r.id().value(), r.name().value()))
-      .toList();
-    entity.setReviewers(reviewers);
+        var publisherEntity = em.find(PublisherEntity.class, writingStarted.publisher().id().value());
+        entity.setPublisher(publisherEntity);
+      }
+      case ChapterAdded chapterAdded -> {
+        var chapter = chapterAdded.chapter();
 
-    entity.getChapters().clear();
-    var chapters = book.getChapters().stream()
-      .map(c -> new ChapterEntity(entity.getId(), c.chapterNumber().value(), c.title().value(), c.content().value()))
-      .toList();
-    entity.setChapters(chapters);
+        em.persist(
+          new ChapterEntity(
+            chapterAdded.bookId().value(),
+            chapter.chapterNumber().value(),
+            chapter.title().value(),
+            chapter.content().value())
+        );
+      }
+      case MovedToEditing ignore -> {
+        entity.setCurrentState(BookEntity.State.Editing);
+      }
+      case FormatAdded formatAdded -> {
+        var format = formatAdded.format();
 
-    entity.getTranslations().clear();
-    var translations = book.getTranslations().stream()
-      .map(c -> new TranslationVO(c.language().id().value(), c.translator().id().value()))
-      .toList();
-    entity.setTranslations(translations);
+        em.persist(
+          new FormatEntity(
+            formatAdded.bookId().value(),
+            format.formatType().value(),
+            format.totalCopies().value(),
+            format.soldCopies().value())
+        );
+      }
+      case FormatRemoved formatRemoved -> {
+        var format = entity.getFormats().stream()
+          .filter(f -> f.getFormatType().equals(formatRemoved.format().formatType().value()))
+          .findFirst();
 
-    entity.getFormats().clear();
-    var formats = book.getFormats().stream()
-      .map(c -> new FormatEntity(entity.getId(), c.formatType().value(), c.totalCopies().value(), c.soldCopies().value()))
-      .toList();
-    entity.setFormats(formats);
+        em.remove(format);
+      }
+      case TranslationAdded translationAdded -> {
+        var translation = translationAdded.translation();
 
-    var committeeApproval = book.getCommitteeApproval() != null
-      ? new CommitteeApprovalVO(
-      book.getCommitteeApproval().isApproved(),
-      book.getCommitteeApproval().feedback().value()
-    ) : null;
-    entity.setCommitteeApproval(committeeApproval);
+        em.persist(
+          new TranslationVO(
+            translation.language().id().value(),
+            translation.translator().id().value()
+          )
+        );
+      }
+      case ReviewerAdded reviewerAdded -> {
+        var reviewer = reviewerAdded.reviewer();
 
+        em.persist(
+          new ReviewerEntity(
+            reviewerAdded.bookId().value(),
+            reviewer.name().value()
+          )
+        );
+      }
+      case ReviewerRemoved reviewerRemoved -> {
+        var format = entity.getReviewers().stream()
+          .filter(f -> f.getId().equals(reviewerRemoved.reviewer().id().value()))
+          .findFirst();
+
+        em.remove(format);
+      }
+      case IsbnSet isbnSet -> {
+        entity.setIsbn(isbnSet.isbn().value());
+      }
+      case Approved approved -> {
+        entity.setCommitteeApproval(new CommitteeApprovalVO(
+          approved.committeeApproval().isApproved(),
+          approved.committeeApproval().feedback().value()
+        ));
+      }
+      case MovedToPrinting movedToPrinting -> {
+        entity.setCurrentState(BookEntity.State.Printing);
+        entity.setTotalPages(movedToPrinting.totalPages().value());
+        entity.setNumberOfIllustrations(movedToPrinting.numberOfIllustrations().value());
+        entity.setBindingType(movedToPrinting.bindingType().value());
+        entity.setSummary(movedToPrinting.summary().value());
+      }
+      case Published published -> {
+        entity.setCurrentState(BookEntity.State.Published);
+        entity.setPublicationDate(published.publishedAt());
+      }
+      case MovedToOutOfPrint ignore -> {
+        entity.setCurrentState(BookEntity.State.OutOfPrint);
+      }
+    }
     return entity;
   }
 }

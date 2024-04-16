@@ -7,6 +7,8 @@ import io.eventdriven.slimdownaggregates.original.domain.books.publishers.Publis
 import io.eventdriven.slimdownaggregates.original.domain.books.repositories.BooksRepository;
 import io.eventdriven.slimdownaggregates.original.domain.books.services.PublishingHouse;
 
+import java.time.LocalDate;
+
 public class BooksServiceImpl implements BooksService {
   @Override
   public void createDraft(CreateDraftCommand command) {
@@ -108,7 +110,7 @@ public class BooksServiceImpl implements BooksService {
     var book = repository.findById(command.bookId())
       .orElseThrow(() -> new IllegalStateException("Book doesn't exist"));
 
-    book.moveToPublished();
+    book.moveToPublished(LocalDate.now());
 
     repository.update(book);
   }
@@ -118,7 +120,7 @@ public class BooksServiceImpl implements BooksService {
     var book = repository.findById(command.bookId())
       .orElseThrow(() -> new IllegalStateException("Book doesn't exist"));
 
-    book.moveToPrinting();
+    book.moveToPrinting(command.bindingType(), command.summary());
 
     repository.update(book);
   }

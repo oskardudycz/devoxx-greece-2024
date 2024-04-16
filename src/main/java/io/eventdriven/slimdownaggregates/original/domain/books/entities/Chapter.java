@@ -1,5 +1,7 @@
 package io.eventdriven.slimdownaggregates.original.domain.books.entities;
 
+import io.eventdriven.slimdownaggregates.original.infrastructure.valueobjects.PositiveInt;
+
 public class Chapter {
   private final ChapterNumber chapterNumber;
   private ChapterTitle title;
@@ -9,6 +11,7 @@ public class Chapter {
     ChapterNumber chapterNumber,
     ChapterTitle title,
     ChapterContent content
+
   ) {
     this.chapterNumber = chapterNumber;
     this.title = title;

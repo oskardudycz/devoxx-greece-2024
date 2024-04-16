@@ -1,36 +1,28 @@
 package io.eventdriven.slimdownaggregates.original.domain.books;
 
 import io.eventdriven.slimdownaggregates.original.domain.books.entities.*;
-import io.eventdriven.slimdownaggregates.original.domain.books.events.BookMovedToEditingEvent;
-import io.eventdriven.slimdownaggregates.original.domain.books.events.BookPublishedEvent;
-import io.eventdriven.slimdownaggregates.original.domain.books.events.ChapterAddedEvent;
 import io.eventdriven.slimdownaggregates.original.domain.books.factories.BookFactory;
 import io.eventdriven.slimdownaggregates.original.domain.books.services.PublishingHouse;
 import io.eventdriven.slimdownaggregates.original.infrastructure.aggregates.Aggregate;
 import io.eventdriven.slimdownaggregates.original.infrastructure.valueobjects.NonEmptyString;
+import io.eventdriven.slimdownaggregates.original.infrastructure.valueobjects.NonNegativeInt;
 import io.eventdriven.slimdownaggregates.original.infrastructure.valueobjects.PositiveInt;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
+import static io.eventdriven.slimdownaggregates.original.domain.books.BookEvent.*;
 import static io.eventdriven.slimdownaggregates.original.infrastructure.validation.Validation.assertNotNull;
 
 public class Book extends Aggregate<BookId> {
   private State currentState = State.WRITING;
   private final Title title;
   private final Author author;
-  private final Publisher publisher;
-  private final PositiveInt edition;
   // Properties
   private final Genre genre;
   private ISBN isbn;
-  private final LocalDate publicationDate;
-  private final PositiveInt totalPages;
-  private final PositiveInt numberOfIllustrations;
-  private final NonEmptyString bindingType;
-  private final NonEmptyString summary;
   private CommitteeApproval committeeApproval;
   private final PublishingHouse publishingHouse;
   private final List<Chapter> chapters;
@@ -48,11 +40,6 @@ public class Book extends Aggregate<BookId> {
     PositiveInt edition,
     Genre genre,
     ISBN isbn,
-    LocalDate publicationDate,
-    PositiveInt totalPages,
-    PositiveInt numberOfIllustrations,
-    NonEmptyString bindingType,
-    NonEmptyString summary,
     CommitteeApproval committeeApproval,
     List<Reviewer> reviewers,
     List<Chapter> chapters,
@@ -70,15 +57,8 @@ public class Book extends Aggregate<BookId> {
     this.title = title;
     this.author = author;
     this.publishingHouse = publishingHouse;
-    this.publisher = publisher;
-    this.edition = edition;
     this.genre = genre;
     this.isbn = isbn;
-    this.publicationDate = publicationDate;
-    this.totalPages = totalPages;
-    this.numberOfIllustrations = numberOfIllustrations;
-    this.bindingType = bindingType;
-    this.summary = summary;
     this.committeeApproval = committeeApproval;
     this.reviewers = reviewers;
     this.chapters = chapters != null ? chapters : new ArrayList<>();
@@ -95,11 +75,14 @@ public class Book extends Aggregate<BookId> {
     PositiveInt edition,
     Genre genre
   ) {
-    return new Book(
+    var book = new Book(
       bookId, State.WRITING, title, author, publishingHouse, publisher, edition, genre,
-      null, null, null, null, null, null,
-      null, null, null, null, null
+      null, null, null, null, null, null
     );
+
+    book.addDomainEvent(new WritingStarted(bookId, genre, title, author, edition, publisher));
+
+    return book;
   }
 
   public void addChapter(ChapterTitle title, ChapterContent content) {
@@ -115,7 +98,7 @@ public class Book extends Aggregate<BookId> {
     var chapter = new Chapter(new ChapterNumber(chapters.size() + 1), title, content);
     chapters.add(chapter);
 
-    addDomainEvent(new ChapterAddedEvent(this.id, chapter));
+    addDomainEvent(new ChapterAdded(this.id, chapter));
   }
 
   public void moveToEditing() {
@@ -130,7 +113,7 @@ public class Book extends Aggregate<BookId> {
 
     currentState = State.EDITING;
 
-    addDomainEvent(new BookMovedToEditingEvent(this.id));
+    addDomainEvent(new MovedToEditing(this.id));
   }
 
   public void addTranslation(Translation translation) {
@@ -141,6 +124,8 @@ public class Book extends Aggregate<BookId> {
       throw new IllegalStateException("Cannot add more translationsCount. Maximum 5 translationsCount are allowed.");
 
     translations.add(translation);
+
+    addDomainEvent(new TranslationAdded(id, translation));
   }
 
   public void addFormat(Format format) {
@@ -151,6 +136,8 @@ public class Book extends Aggregate<BookId> {
       throw new IllegalStateException("format " + format.formatType() + " already exists.");
 
     formats.add(format);
+
+    addDomainEvent(new FormatAdded(id, format));
   }
 
   public void removeFormat(Format format) {
@@ -161,6 +148,8 @@ public class Book extends Aggregate<BookId> {
       throw new IllegalStateException("format " + format.formatType() + " does not exist.");
 
     formats.removeIf(f -> f.formatType().equals(format.formatType()));
+
+    addDomainEvent(new FormatRemoved(id, format));
   }
 
   public void addReviewer(Reviewer reviewer) {
@@ -171,6 +160,8 @@ public class Book extends Aggregate<BookId> {
       throw new IllegalStateException(reviewer.name() + "  is already a reviewer..");
 
     reviewers.add(reviewer);
+
+    addDomainEvent(new ReviewerAdded(id, reviewer));
   }
 
   public void approve(CommitteeApproval committeeApproval) {
@@ -182,6 +173,8 @@ public class Book extends Aggregate<BookId> {
         "A book cannot be approved unless it has been reviewed by at least three reviewersCount.");
 
     this.committeeApproval = committeeApproval;
+
+    addDomainEvent(new Approved(id, committeeApproval));
   }
 
   public void setISBN(ISBN isbn) {
@@ -192,9 +185,12 @@ public class Book extends Aggregate<BookId> {
       throw new IllegalStateException("Cannot change already set ISBN.");
 
     this.isbn = isbn;
+
+
+    addDomainEvent(new IsbnSet(id, isbn));
   }
 
-  public void moveToPrinting() {
+  public void moveToPrinting(NonEmptyString bindingType, NonEmptyString summary) {
     if (this.currentState != State.EDITING) {
       throw new IllegalStateException("Cannot move to Printing state from the current state.");
     }
@@ -220,10 +216,26 @@ public class Book extends Aggregate<BookId> {
       throw new IllegalStateException("Cannot move to the Printing state until the genre limit is reached.");
     }
 
+    var totalNumberOfPages =
+      new PositiveInt(chapters.stream().map(ch -> ch.content().totalPages().value()).mapToInt(Integer::intValue).sum());
+
+    var numberOfIllustrations =
+      new NonNegativeInt(chapters.stream().map(ch -> ch.content().totalPages().value()).mapToInt(Integer::intValue).sum());
+
     this.currentState = State.PRINTING;
+
+    addDomainEvent(
+      new MovedToPrinting(
+        id,
+        totalNumberOfPages,
+        numberOfIllustrations,
+        bindingType,
+        summary
+      )
+    );
   }
 
-  public void moveToPublished() {
+  public void moveToPublished(LocalDate now) {
     if (currentState != State.PRINTING || translations.size() < 5)
       throw new IllegalStateException("Cannot move to Published state from the current state.");
 
@@ -237,7 +249,7 @@ public class Book extends Aggregate<BookId> {
 
     currentState = State.PUBLISHED;
 
-    addDomainEvent(new BookPublishedEvent(this.id, isbn, title, author));
+    addDomainEvent(new Published(this.id, isbn, title, author, now));
   }
 
   public void moveToOutOfPrint() {
@@ -251,78 +263,8 @@ public class Book extends Aggregate<BookId> {
         "Cannot move to Out of Print state if more than 10% of total copies are unsold.");
 
     currentState = State.OUT_OF_PRINT;
-  }
 
-  public State currentState() {
-    return currentState;
-  }
-
-  public Title title() {
-    return title;
-  }
-
-  public Author author() {
-    return author;
-  }
-
-  public Genre genre() {
-    return genre;
-  }
-
-  public Publisher publisher() {
-    return publisher;
-  }
-
-  public PositiveInt getEdition() {
-    return edition;
-  }
-
-  public PublishingHouse publishingHouse() {
-    return publishingHouse;
-  }
-
-  public List<Reviewer> reviewers() {
-    return Collections.unmodifiableList(reviewers);
-  }
-
-  public ISBN isbn() {
-    return isbn;
-  }
-
-  public LocalDate publicationDate() {
-    return publicationDate;
-  }
-
-  public PositiveInt getTotalPages() {
-    return totalPages;
-  }
-
-  public PositiveInt getNumberOfIllustrations() {
-    return numberOfIllustrations;
-  }
-
-  public NonEmptyString getBindingType() {
-    return bindingType;
-  }
-
-  public NonEmptyString getSummary() {
-    return summary;
-  }
-
-  public List<Chapter> getChapters() {
-    return Collections.unmodifiableList(chapters);
-  }
-
-  public CommitteeApproval getCommitteeApproval() {
-    return committeeApproval;
-  }
-
-  public List<Translation> getTranslations() {
-    return Collections.unmodifiableList(translations);
-  }
-
-  public List<Format> getFormats() {
-    return Collections.unmodifiableList(formats);
+    addDomainEvent(new MovedToOutOfPrint(this.id));
   }
 
   public enum State {WRITING, EDITING, PRINTING, PUBLISHED, OUT_OF_PRINT}
@@ -352,8 +294,7 @@ public class Book extends Aggregate<BookId> {
       List<Format> formats) {
       return new Book(
         bookId, state, title, author, publishingHouse,
-        publisher, edition, genre, isbn, publicationDate, totalPages,
-        numberOfIllustrations, bindingType, summary, committeeApproval,
+        publisher, edition, genre, isbn, committeeApproval,
         reviewers, chapters, translations, formats);
     }
   }
