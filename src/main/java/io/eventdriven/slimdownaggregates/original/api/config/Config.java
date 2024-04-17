@@ -6,7 +6,6 @@ import io.eventdriven.slimdownaggregates.original.application.books.BooksService
 import io.eventdriven.slimdownaggregates.original.application.books.BooksServiceImpl;
 import io.eventdriven.slimdownaggregates.original.domain.books.Book;
 import io.eventdriven.slimdownaggregates.original.domain.books.authors.AuthorProvider;
-import io.eventdriven.slimdownaggregates.original.domain.books.entities.*;
 import io.eventdriven.slimdownaggregates.original.domain.books.factories.BookFactory;
 import io.eventdriven.slimdownaggregates.original.domain.books.publishers.PublisherProvider;
 import io.eventdriven.slimdownaggregates.original.domain.books.repositories.BooksQueryRepository;
@@ -16,7 +15,7 @@ import io.eventdriven.slimdownaggregates.original.persistence.authors.AuthorEnti
 import io.eventdriven.slimdownaggregates.original.persistence.authors.AuthorRepository;
 import io.eventdriven.slimdownaggregates.original.persistence.authors.AuthorService;
 import io.eventdriven.slimdownaggregates.original.persistence.books.BookEntity;
-import io.eventdriven.slimdownaggregates.original.persistence.books.repositories.BooksEntityRepository;
+import io.eventdriven.slimdownaggregates.original.persistence.books.repositories.BooksRepositoryImpl;
 import io.eventdriven.slimdownaggregates.original.persistence.books.repositories.BooksJpaRepository;
 import io.eventdriven.slimdownaggregates.original.persistence.publishers.PublisherEntity;
 import io.eventdriven.slimdownaggregates.original.persistence.publishers.PublisherRepository;
@@ -25,8 +24,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -57,7 +54,7 @@ public class Config {
 
   @Bean
   BooksRepository booksRepository(BooksJpaRepository jpaRepository, BookFactory bookFactory) {
-    return new BooksEntityRepository(jpaRepository, bookFactory);
+    return new BooksRepositoryImpl(jpaRepository, bookFactory);
   }
 
   @Bean

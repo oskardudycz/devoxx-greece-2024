@@ -2,137 +2,127 @@ package io.eventdriven.slimdownaggregates.original.application.books;
 
 import io.eventdriven.slimdownaggregates.original.application.books.commands.*;
 import io.eventdriven.slimdownaggregates.original.domain.books.Book;
+import io.eventdriven.slimdownaggregates.original.domain.books.BookEvent;
 import io.eventdriven.slimdownaggregates.original.domain.books.authors.AuthorProvider;
+import io.eventdriven.slimdownaggregates.original.domain.books.entities.BookId;
 import io.eventdriven.slimdownaggregates.original.domain.books.publishers.PublisherProvider;
 import io.eventdriven.slimdownaggregates.original.domain.books.repositories.BooksRepository;
 import io.eventdriven.slimdownaggregates.original.domain.books.services.PublishingHouse;
 
 import java.time.LocalDate;
+import java.util.function.Function;
 
 public class BooksServiceImpl implements BooksService {
   @Override
   public void createDraft(CreateDraftCommand command) {
-    var book = Book.createDraft(
+    getAndUpdate(
       command.bookId(),
-      command.title(),
-      authorProvider.getOrCreate(command.author()),
-      publishingHouse,
-      publisherProvider.getById(command.publisherId()),
-      command.edition(),
-      command.genre()
+      (ignore) ->
+        Book.createDraft(
+          command.bookId(),
+          command.title(),
+          authorProvider.getOrCreate(command.author()),
+          publisherProvider.getById(command.publisherId()),
+          command.edition(),
+          command.genre()
+        )
     );
-
-    repository.add(book);
   }
 
   @Override
   public void addChapter(AddChapterCommand command) {
-    var book = repository.findById(command.bookId())
-      .orElseThrow(() -> new IllegalStateException("Book doesn't exist"));
-
-    book.addChapter(command.title(), command.content());
-
-    repository.update(book);
+    getAndUpdate(
+      command.bookId(),
+      book -> book.addChapter(command.title(), command.content())
+    );
   }
 
   @Override
   public void moveToEditing(MoveToEditingCommand command) {
-    var book = repository.findById(command.bookId())
-      .orElseThrow(() -> new IllegalStateException("Book doesn't exist"));
-
-    book.moveToEditing();
-
-    repository.update(book);
+    getAndUpdate(
+      command.bookId(),
+      book -> book.moveToEditing()
+    );
   }
 
   @Override
   public void addTranslation(AddTranslationCommand command) {
-    var book = repository.findById(command.bookId())
-      .orElseThrow(() -> new IllegalStateException("Book doesn't exist"));
-
-    book.addTranslation(command.translation());
-
-    repository.update(book);
+    getAndUpdate(
+      command.bookId(),
+      book -> book.addTranslation(command.translation())
+    );
   }
 
   @Override
   public void addFormat(AddFormatCommand command) {
-    var book = repository.findById(command.bookId())
-      .orElseThrow(() -> new IllegalStateException("Book doesn't exist"));
-
-    book.addFormat(command.format());
-
-    repository.update(book);
+    getAndUpdate(
+      command.bookId(),
+      book -> book.addFormat(command.format())
+    );
   }
 
   @Override
   public void removeFormat(RemoveFormatCommand command) {
-    var book = repository.findById(command.bookId())
-      .orElseThrow(() -> new IllegalStateException("Book doesn't exist"));
-
-    book.removeFormat(command.format());
-
-    repository.update(book);
+    getAndUpdate(
+      command.bookId(),
+      book -> book.removeFormat(command.format())
+    );
   }
 
   @Override
   public void addReviewer(AddReviewerCommand command) {
-    var book = repository.findById(command.bookId())
-      .orElseThrow(() -> new IllegalStateException("Book doesn't exist"));
-
-    book.addReviewer(command.reviewer());
-
-    repository.update(book);
+    getAndUpdate(
+      command.bookId(),
+      book -> book.addReviewer(command.reviewer())
+    );
   }
 
   @Override
   public void approve(ApproveCommand command) {
-    var book = repository.findById(command.bookId())
-      .orElseThrow(() -> new IllegalStateException("Book doesn't exist"));
-
-    book.approve(command.committeeApproval());
-
-    repository.update(book);
+    getAndUpdate(
+      command.bookId(),
+      book -> book.approve(command.committeeApproval())
+    );
   }
 
   @Override
   public void setISBN(SetISBNCommand command) {
-    var book = repository.findById(command.bookId())
-      .orElseThrow(() -> new IllegalStateException("Book doesn't exist"));
-
-    book.setISBN(command.isbn());
-
-    repository.update(book);
+    getAndUpdate(
+      command.bookId(),
+      book -> book.setISBN(command.isbn())
+    );
   }
 
   @Override
   public void moveToPublished(MoveToPublishedCommand command) {
-    var book = repository.findById(command.bookId())
-      .orElseThrow(() -> new IllegalStateException("Book doesn't exist"));
-
-    book.moveToPublished(LocalDate.now());
-
-    repository.update(book);
+    getAndUpdate(
+      command.bookId(),
+      book -> book.moveToPublished(LocalDate.now())
+    );
   }
 
   @Override
   public void moveToPrinting(MoveToPrintingCommand command) {
-    var book = repository.findById(command.bookId())
-      .orElseThrow(() -> new IllegalStateException("Book doesn't exist"));
-
-    book.moveToPrinting(command.bindingType(), command.summary());
-
-    repository.update(book);
+    getAndUpdate(
+      command.bookId(),
+      book -> book.moveToPrinting(command.bindingType(), command.summary())
+    );
   }
 
   @Override
   public void moveToOutOfPrint(MoveToOutOfPrintCommand command) {
-    var book = repository.findById(command.bookId())
-      .orElseThrow(() -> new IllegalStateException("Book doesn't exist"));
+    getAndUpdate(
+      command.bookId(),
+      book -> book.moveToOutOfPrint()
+    );
+  }
 
-    book.moveToOutOfPrint();
-
-    repository.update(book);
+  private void getAndUpdate(BookId bookId, Function<Book, BookEvent> decide) {
+    repository.getAndUpdate(
+      bookId, book -> new BookEvent[]{
+        decide.apply(book)
+      }
+    );
   }
 
 

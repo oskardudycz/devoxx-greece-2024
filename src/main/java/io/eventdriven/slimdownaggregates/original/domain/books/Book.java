@@ -10,6 +10,7 @@ import io.eventdriven.slimdownaggregates.original.infrastructure.valueobjects.Po
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Dictionary;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -66,26 +67,18 @@ public class Book extends Aggregate<BookId> {
     this.formats = formats != null ? formats : new ArrayList<>();
   }
 
-  public static Book createDraft(
+  public static WritingStarted createDraft(
     BookId bookId,
     Title title,
     Author author,
-    PublishingHouse publishingHouse,
     Publisher publisher,
     PositiveInt edition,
     Genre genre
   ) {
-    var book = new Book(
-      bookId, State.WRITING, title, author, publishingHouse, publisher, edition, genre,
-      null, null, null, null, null, null
-    );
-
-    book.addDomainEvent(new WritingStarted(bookId, genre, title, author, edition, publisher));
-
-    return book;
+    return new WritingStarted(bookId, genre, title, author, edition, publisher);
   }
 
-  public void addChapter(ChapterTitle title, ChapterContent content) {
+  public ChapterAdded addChapter(ChapterTitle title, ChapterContent content) {
     if (chapters.stream().anyMatch(chap -> chap.title().equals(title))) {
       throw new IllegalStateException("chapter with the same title already exists.");
     }
@@ -98,10 +91,10 @@ public class Book extends Aggregate<BookId> {
     var chapter = new Chapter(new ChapterNumber(chapters.size() + 1), title, content);
     chapters.add(chapter);
 
-    addDomainEvent(new ChapterAdded(this.id, chapter));
+    return new ChapterAdded(this.id, chapter);
   }
 
-  public void moveToEditing() {
+  public MovedToEditing moveToEditing() {
     if (currentState != State.WRITING)
       throw new IllegalStateException("Cannot move to Editing state from the current state.");
 
@@ -113,10 +106,10 @@ public class Book extends Aggregate<BookId> {
 
     currentState = State.EDITING;
 
-    addDomainEvent(new MovedToEditing(this.id));
+    return new MovedToEditing(this.id);
   }
 
-  public void addTranslation(Translation translation) {
+  public TranslationAdded addTranslation(Translation translation) {
     if (currentState != State.EDITING)
       throw new IllegalStateException("Cannot add translation of a book that is not in the Editing state.");
 
@@ -125,10 +118,10 @@ public class Book extends Aggregate<BookId> {
 
     translations.add(translation);
 
-    addDomainEvent(new TranslationAdded(id, translation));
+    return new TranslationAdded(id, translation);
   }
 
-  public void addFormat(Format format) {
+  public FormatAdded addFormat(Format format) {
     if (currentState != State.EDITING)
       throw new IllegalStateException("Cannot add format of a book that is not in the Editing state.");
 
@@ -137,10 +130,10 @@ public class Book extends Aggregate<BookId> {
 
     formats.add(format);
 
-    addDomainEvent(new FormatAdded(id, format));
+    return new FormatAdded(id, format);
   }
 
-  public void removeFormat(Format format) {
+  public FormatRemoved removeFormat(Format format) {
     if (currentState != State.EDITING)
       throw new IllegalStateException("Cannot remove format of a book that is not in the Editing state.");
 
@@ -149,10 +142,10 @@ public class Book extends Aggregate<BookId> {
 
     formats.removeIf(f -> f.formatType().equals(format.formatType()));
 
-    addDomainEvent(new FormatRemoved(id, format));
+    return new FormatRemoved(id, format);
   }
 
-  public void addReviewer(Reviewer reviewer) {
+  public ReviewerAdded addReviewer(Reviewer reviewer) {
     if (currentState != State.EDITING)
       throw new IllegalStateException("Cannot add format of a book that is not in the Editing state.");
 
@@ -161,10 +154,10 @@ public class Book extends Aggregate<BookId> {
 
     reviewers.add(reviewer);
 
-    addDomainEvent(new ReviewerAdded(id, reviewer));
+    return new ReviewerAdded(id, reviewer);
   }
 
-  public void approve(CommitteeApproval committeeApproval) {
+  public Approved approve(CommitteeApproval committeeApproval) {
     if (currentState != State.EDITING)
       throw new IllegalStateException("Cannot approve a book that is not in the Editing state.");
 
@@ -174,10 +167,10 @@ public class Book extends Aggregate<BookId> {
 
     this.committeeApproval = committeeApproval;
 
-    addDomainEvent(new Approved(id, committeeApproval));
+    return new Approved(id, committeeApproval);
   }
 
-  public void setISBN(ISBN isbn) {
+  public IsbnSet setISBN(ISBN isbn) {
     if (this.currentState != State.EDITING)
       throw new IllegalStateException("Cannot approve a book that is not in the Editing state.");
 
@@ -187,10 +180,10 @@ public class Book extends Aggregate<BookId> {
     this.isbn = isbn;
 
 
-    addDomainEvent(new IsbnSet(id, isbn));
+    return new IsbnSet(id, isbn);
   }
 
-  public void moveToPrinting(NonEmptyString bindingType, NonEmptyString summary) {
+  public MovedToPrinting moveToPrinting(NonEmptyString bindingType, NonEmptyString summary) {
     if (this.currentState != State.EDITING) {
       throw new IllegalStateException("Cannot move to Printing state from the current state.");
     }
@@ -224,18 +217,17 @@ public class Book extends Aggregate<BookId> {
 
     this.currentState = State.PRINTING;
 
-    addDomainEvent(
+    return
       new MovedToPrinting(
         id,
         totalNumberOfPages,
         numberOfIllustrations,
         bindingType,
         summary
-      )
-    );
+      );
   }
 
-  public void moveToPublished(LocalDate now) {
+  public Published moveToPublished(LocalDate now) {
     if (currentState != State.PRINTING || translations.size() < 5)
       throw new IllegalStateException("Cannot move to Published state from the current state.");
 
@@ -249,10 +241,10 @@ public class Book extends Aggregate<BookId> {
 
     currentState = State.PUBLISHED;
 
-    addDomainEvent(new Published(this.id, isbn, title, author, now));
+    return new Published(this.id, isbn, title, author, now);
   }
 
-  public void moveToOutOfPrint() {
+  public MovedToOutOfPrint moveToOutOfPrint() {
     if (currentState != State.PUBLISHED)
       throw new IllegalStateException("Cannot move to Out of Print state from the current state.");
 
@@ -264,7 +256,7 @@ public class Book extends Aggregate<BookId> {
 
     currentState = State.OUT_OF_PRINT;
 
-    addDomainEvent(new MovedToOutOfPrint(this.id));
+    return new MovedToOutOfPrint(this.id);
   }
 
   public enum State {WRITING, EDITING, PRINTING, PUBLISHED, OUT_OF_PRINT}
