@@ -15,6 +15,6 @@ We'll be doing multiple transitions step by step to make it more focused on the 
 ## Prerequisities
 
 1. Clone this repository.
-2. Install Java JDK 17 (or later) - https://www.oracle.com/java/technologies/downloads/.
+2. Install Java JDK 21 (or at minimum 17 and above) - https://www.oracle.com/java/technologies/downloads/.
 3. Install IntelliJ, Eclipse, VSCode or other preferred IDE.
 4. Open main folder as project.
